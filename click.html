@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Line Intersection & Diamond Game</title>
+  <!-- Updated Favicon: thicker, colourful hollow circle -->
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E
+  %3Cdefs%3E
+    %3ClinearGradient id='grad' x1='0%' y1='0%' x2='100%' y2='100%'%3E
+      %3Cstop offset='0%' style='stop-color:%23ff8000;stop-opacity:1'/%3E
+      %3Cstop offset='100%' style='stop-color:%23a000c0;stop-opacity:1'/%3E
+    %3C/linearGradient%3E
+  %3C/defs%3E
+  %3Ccircle cx='50' cy='50' r='40' fill='none' stroke='url(%23grad)' stroke-width='10' stroke-linecap='round'/%3E
+%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <!-- Using Playfair Display for messages and ranking overlay text -->
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display&display=swap" rel="stylesheet">
+  <!-- Orbitron for futuristic New Game button -->
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron&display=swap" rel="stylesheet">
+  <style>
+    body {
+      background: black;
+      margin: 0;
+      overflow: hidden;
+      position: relative;
+      font-family: 'Playfair Display', serif;
+    }
+    /* Canvas for drawing lines */
+    #lineCanvas {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 0;
+    }
+    /* Blue circles with a true hollow center and futuristic gradient */
+    .circle {
+      position: absolute;
+      width: 60px;
+      height: 60px;
+      cursor: pointer;
+      z-index: 1;
+      background: linear-gradient(135deg, #0033ff, #00ccff, #a000c0);
+      filter: drop-shadow(0 0 10px rgba(0, 204, 255, 0.8));
+      clip-path: circle(50% at center);
+      mask: radial-gradient(circle 15px at center, transparent 15px, black 16px);
+      -webkit-mask: radial-gradient(circle 15px at center, transparent 15px, black 16px);
+      transition: transform 0.2s ease-in-out;
+    }
+    .circle:hover {
+      transform: scale(1.1);
+    }
+    /* Diamond styling - gold gradient and glowing */
+    #diamond {
+      position: absolute;
+      width: 30px;
+      height: 30px;
+      background: linear-gradient(135deg, #ffcc00, #ffdd44, #ffffff);
+      clip-path: polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%);
+      filter: drop-shadow(0 0 12px rgba(255, 215, 0, 0.8));
+      z-index: 2;
+      cursor: pointer;
+    }
+    /* Line styles - drawn on canvas with glow (via canvas shadow properties) */
+    .line {
+      stroke-width: 5px;
+      stroke-linecap: round;
+      stroke: orange;
+      filter: blur(0.8px);
+    }
+    /* Shiny, futuristic counter boxes */
+    .counter {
+  position: fixed;
+  top: 10px;
+  font-size: 22px;
+  color: #ffffff;
+  z-index: 3000;
+  padding: 10px 20px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #292929, #5e0077, #ff6600);
+  box-shadow: 0 0 10px rgba(255, 102, 0, 0.8), 0 0 5px rgba(94, 0, 119, 0.8);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  transition: all 0.2s ease-in-out;
+}
+  .counter:hover {
+  transform: scale(1.05);
+  box-shadow: 0 0 15px rgba(255, 102, 0, 1), 0 0 8px rgba(94, 0, 119, 1);
+}
+
+    #totalUntouched { left: 10px; }
+    #consecutiveUntouched { left: 250px; }
+    #scoreCounter { right: 10px; }
+    /* Ranking overlay */
+    #rankingOverlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.9);
+      color: white;
+      display: none;
+      z-index: 5000;
+      text-align: center;
+      padding-top: 100px;
+    }
+    #rankingOverlay h1 {
+      font-size: 48px;
+      margin-bottom: 20px;
+    }
+    #rankingOverlay ul {
+      list-style: none;
+      padding: 0;
+      font-size: 24px;
+    }
+    /* Highlight current score in ranking list (via inline style in JS below) */
+    #finalScore {
+      font-size: 36px;
+      font-weight: bold;
+      color: #ffcc00;
+    }
+    /* New Game button with futuristic styling and gradient */ 
+    #newGameButton {
+      margin-top: 30px;
+      padding: 10px 20px;
+      font-size: 24px;
+      cursor: pointer;
+      border: none;
+      border-radius: 5px;
+      background: linear-gradient(45deg, #00f, #0ff, #f0f);
+      color: white;
+      text-shadow: 0 0 5px rgba(255, 255, 255, 0.7);
+      font-family: 'Orbitron', sans-serif;
+    }
+    /* Game over message (if used separately) with subtle glow */ 
+    #message {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      font-size: 48px;
+      color: white;
+      display: none;
+      z-index: 4000;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="lineCanvas"></canvas>
+  <div id="totalUntouched" class="counter">Untouched Total: 0</div>
+  <div id="consecutiveUntouched" class="counter">Consecutive Untouched: 0</div>
+  <div id="scoreCounter" class="counter">Score: 0</div>
+  <div id="rankingOverlay">
+    <h1>Game Over</h1>
+    <p>Your Score: <span id="finalScore"></span></p>
+    <h2>Ranking</h2>
+    <ul id="rankingList"></ul>
+    <button id="newGameButton">New Game</button>
+  </div>
+  <div id="message"></div>
+  
+  <script>
+    // Global game variables
+    let currentCycle = 0;
+    let totalUntouched = 0;
+    let consecutiveUntouched = 0;
+    let gamePaused = false;
+    let lastPoint = null;  // {x, y} of last circle click
+    let segments = [];     // Active line segments: {x1, y1, x2, y2, bornCycle}
+    let circleSize = 60;   // Starting circle diameter in px
+    const minCircleSize = 50;
+    let totalLines = 0;    // Total lines drawn (score)
+    
+    // Ranking high scores array
+    let highScores = [];
+    
+    // Dynamic thresholds based on totalLines (score)
+    function getTotalThreshold() {
+      // Starts at 11, decreases by 1 for each 10 points, not lower than 4
+      return Math.max(11 - Math.floor(totalLines / 15), 4);
+    }
+    function getConsecutiveThreshold() {
+      // Starts at 7, decreases by 1 for each 10 points, not lower than 3
+      return Math.max(7 - Math.floor(totalLines / 15), 3);
+    }
+    
+    // Setup canvas for drawing lines
+    const canvas = document.getElementById("lineCanvas");
+    const ctx = canvas.getContext("2d");
+    function resizeCanvas() {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+      redrawSegments();
+    }
+    window.addEventListener("resize", resizeCanvas);
+    resizeCanvas();
+    
+    // Update on-screen counters
+    function updateCounters() {
+      document.getElementById("totalUntouched").textContent = "Untouched Total: " + totalUntouched;
+      document.getElementById("consecutiveUntouched").textContent = "Consecutive Untouched: " + consecutiveUntouched;
+      document.getElementById("scoreCounter").textContent = "Score: " + totalLines;
+    }
+    
+    // Create a blue circle with a true hollow center
+    function createCircle() {
+      if (gamePaused) return;
+      
+      currentCycle++;
+      // Remove aged segments (older than 10 cycles) and redraw
+      segments = segments.filter(seg => (currentCycle - seg.bornCycle) < 10);
+      redrawSegments();
+      
+      const circle = document.createElement("div");
+      circle.classList.add("circle");
+      // Use current circleSize for width and height
+      circle.style.width = circleSize + "px";
+      circle.style.height = circleSize + "px";
+      const x = Math.random() * (window.innerWidth - circleSize);
+      const y = Math.random() * (window.innerHeight - circleSize);
+      circle.style.left = x + "px";
+      circle.style.top = y + "px";
+      document.body.appendChild(circle);
+      
+      // Timer: if untouched after 2 seconds, increment counters and remove circle
+      let circleTimer = setTimeout(() => {
+        if (document.body.contains(circle)) {
+          totalUntouched++;
+          consecutiveUntouched++;
+          updateCounters();
+          circle.remove();
+          checkUntouchedConditions();
+        }
+      }, 2000);
+      
+      circle.addEventListener("click", function() {
+        clearTimeout(circleTimer);
+        consecutiveUntouched = 0;
+        updateCounters();
+        // Get the center point of the circle
+        const centerX = x + circleSize / 2;
+        const centerY = y + circleSize / 2;
+        handleCircleClick(centerX, centerY);
+        circle.remove();
+      });
+    }
+    
+    // Check if untouched counters exceed dynamic limits
+    function checkUntouchedConditions() {
+      if (totalUntouched >= getTotalThreshold() || consecutiveUntouched >= getConsecutiveThreshold()) {
+        gameOver("Game Over");
+      }
+    }
+    
+    // Handle circle click: draw line from last point (if any) to current point
+    function handleCircleClick(x, y) {
+      if (lastPoint) {
+        const newSegment = { x1: lastPoint.x, y1: lastPoint.y, x2: x, y2: y, bornCycle: currentCycle };
+        // Check intersection with existing segments
+        for (let seg of segments) {
+          if (segmentsIntersect(newSegment, seg)) {
+            gameOver("Game Over");
+            return;
+          }
+        }
+        // Draw new segment with glow effect
+        ctx.beginPath();
+        ctx.moveTo(lastPoint.x, lastPoint.y);
+        ctx.lineTo(x, y);
+        ctx.strokeStyle = "orange";
+        ctx.lineWidth = 3;
+        ctx.shadowColor = "orange";
+        ctx.shadowBlur = 10;
+        ctx.stroke();
+        ctx.shadowBlur = 0; // Reset shadowBlur after drawing
+        segments.push(newSegment);
+        totalLines++;
+        updateCounters();
+      }
+      lastPoint = { x, y };
+    }
+    
+    // Redraw active segments on canvas with glow effect
+    function redrawSegments() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      for (let seg of segments) {
+        ctx.beginPath();
+        ctx.moveTo(seg.x1, seg.y1);
+        ctx.lineTo(seg.x2, seg.y2);
+        ctx.strokeStyle = "orange";
+        ctx.lineWidth = 3;
+        ctx.shadowColor = "orange";
+        ctx.shadowBlur = 10;
+        ctx.stroke();
+        ctx.shadowBlur = 0; // Reset after drawing
+      }
+    }
+    
+    // Check if two line segments intersect (ignoring shared endpoints)
+    function segmentsIntersect(s1, s2) {
+      if ((s1.x1 === s2.x1 && s1.y1 === s2.y1) ||
+          (s1.x1 === s2.x2 && s1.y1 === s2.y2) ||
+          (s1.x2 === s2.x1 && s1.y2 === s2.y1) ||
+          (s1.x2 === s2.x2 && s1.y2 === s2.y2)) {
+        return false;
+      }
+      function orientation(ax, ay, bx, by, cx, cy) {
+        return (bx - ax) * (cy - ay) - (by - ay) * (cx - ax);
+      }
+      function onSegment(ax, ay, bx, by, cx, cy) {
+        return Math.min(ax, cx) <= bx && bx <= Math.max(ax, cx) &&
+               Math.min(ay, cy) <= by && by <= Math.max(ay, cy);
+      }
+      const o1 = orientation(s1.x1, s1.y1, s1.x2, s1.y2, s2.x1, s2.y1);
+      const o2 = orientation(s1.x1, s1.y1, s1.x2, s1.y2, s2.x2, s2.y2);
+      const o3 = orientation(s2.x1, s2.y1, s2.x2, s2.y2, s1.x1, s1.y1);
+      const o4 = orientation(s2.x1, s2.y1, s2.x2, s2.y2, s1.x2, s1.y2);
+      if (o1 * o2 < 0 && o3 * o4 < 0) return true;
+      if (o1 === 0 && onSegment(s1.x1, s1.y1, s2.x1, s2.y1, s1.x2, s1.y2)) return true;
+      if (o2 === 0 && onSegment(s1.x1, s1.y1, s2.x2, s2.y2, s1.x2, s1.y2)) return true;
+      if (o3 === 0 && onSegment(s2.x1, s2.y1, s1.x1, s1.y1, s2.x2, s2.y2)) return true;
+      if (o4 === 0 && onSegment(s2.x1, s2.y1, s1.x2, s1.y2, s2.x2, s2.y2)) return true;
+      return false;
+    }
+    
+    // Diamond appearance: every 20 seconds a glowing diamond appears for 0.5 seconds and is clickable
+    function createDiamond() {
+      if (gamePaused) return;
+      const diamond = document.createElement("div");
+      diamond.id = "diamond";
+      const dSize = 30;
+      diamond.style.width = dSize + "px";
+      diamond.style.height = dSize + "px";
+      const x = Math.random() * (window.innerWidth - dSize);
+      const y = Math.random() * (window.innerHeight - dSize);
+      diamond.style.left = x + "px";
+      diamond.style.top = y + "px";
+      document.body.appendChild(diamond);
+      
+      // Add click listener so that if the diamond is clicked within 0.5 seconds, reduce totalUntouched by 2
+      diamond.addEventListener("click", function() {
+        totalUntouched = Math.max(0, totalUntouched - 2);
+        updateCounters();
+        diamond.remove();
+      });
+      
+      // Remove diamond after 0.5 seconds if not clicked
+      setTimeout(() => {
+        if (document.getElementById("diamond")) {
+          document.getElementById("diamond").remove();
+        }
+      }, 500);
+    }
+    // Create diamond every 20 seconds
+    setInterval(createDiamond, 20000);
+    
+    // Game Over: store score, show ranking overlay, then wait for new game
+    function gameOver(msg) {
+      gamePaused = true;
+      const finalScore = totalLines;
+      highScores.push(finalScore);
+      // Sort highScores in descending order (highest first)
+      highScores.sort((a, b) => b - a);
+      document.getElementById("finalScore").textContent = finalScore;
+      const list = document.getElementById("rankingList");
+      list.innerHTML = "";
+      let marked = false;
+      highScores.forEach((score, idx) => {
+        const li = document.createElement("li");
+        li.textContent = (idx + 1) + ". " + score;
+        // Highlight the first occurrence of the finalScore
+        if (!marked && score === finalScore) {
+          li.style.fontSize = "28px";
+          li.style.color = "#ffcc00";
+          li.style.fontWeight = "bold";
+          marked = true;
+        }
+        list.appendChild(li);
+      });
+      document.getElementById("rankingOverlay").style.display = "block";
+    }
+    
+    // Reset the game state when starting a new game
+    document.getElementById("newGameButton").addEventListener("click", () => {
+      document.getElementById("rankingOverlay").style.display = "none";
+      resetGame();
+    });
+    
+    function resetGame() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      document.querySelectorAll(".circle").forEach(el => el.remove());
+      const diamond = document.getElementById("diamond");
+      if (diamond) diamond.remove();
+      segments = [];
+      lastPoint = null;
+      totalUntouched = 0;
+      consecutiveUntouched = 0;
+      totalLines = 0;
+      updateCounters();
+      currentCycle = 0;
+      circleSize = 60; // Optionally reset circle size
+      gamePaused = false;
+    }
+    
+    // Key event: Press "Y" to collect the diamond if present
+    document.addEventListener("keydown", function(event) {
+      if (event.key.toLowerCase() === "y" && document.getElementById("diamond")) {
+        totalUntouched = Math.max(0, totalUntouched - 2);
+        updateCounters();
+        document.getElementById("diamond").remove();
+      }
+    });
+    
+    // Create a blue circle every 3 seconds
+    setInterval(createCircle, 3000);
+  </script>
+</body>
+</html>
